@@ -7,16 +7,53 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.util.*;
 
+/**
+ * Implementation of SingleDocumentModel
+ * @author Ivan Bilobrk
+ *
+ */
 public class DefaultSingleDocumentModel implements SingleDocumentModel {
 	
+	/**
+	 * All listeners subscribed to this model.
+	 */
 	private List<SingleDocumentListener> listeners;
+	
+	/**
+	 * Path of this model.
+	 */
 	private Path path;
+	
+	/**
+	 * Current content of this model.
+	 */
 	private String text;
+	
+	/**
+	 * GUI component of this model.
+	 */
 	private JTextArea area;
+	
+	/**
+	 * Flag telling if model has been modified.
+	 */
 	private boolean modified;
+	
+	/**
+	 * Counter used for enumerating created models. Used for equals and hashcode method.
+	 */
 	private static int brojac = 0;
+	
+	/**
+	 * Index of this model.
+	 */
 	private int counter;
 	
+	/**
+	 * Constructor
+	 * @param path
+	 * @param text
+	 */
 	public DefaultSingleDocumentModel(Path path, String text) {
 		super();
 		counter = brojac++;
@@ -26,6 +63,8 @@ public class DefaultSingleDocumentModel implements SingleDocumentModel {
 		this.listeners = new ArrayList<>();
 		area = new JTextArea();
 		area.setText(text);
+		
+		//dodajemo listenera na dokument vezan uz JTextArea koji postavlja zastavicu koja označava da se dokument promjenio
 		area.getDocument().addDocumentListener(new DocumentListener() {
 			
 			@Override
@@ -82,12 +121,18 @@ public class DefaultSingleDocumentModel implements SingleDocumentModel {
 		
 	}
 	
+	/**
+	 * Private method used for alerting listeners if there has been a change in path.
+	 */
 	private void alertListenersPath() {
 		for(var x: listeners) {
 			x.documentFilePathUpdated(this);
 		}
 	}
 	
+	/**
+	 * Private method used for alerting listeners if there has been a change in document.
+	 */
 	private void alertListenersModified() {
 		for(var x: listeners) {
 			x.documentModifyStatusUpdated(this);
@@ -122,9 +167,4 @@ public class DefaultSingleDocumentModel implements SingleDocumentModel {
 		DefaultSingleDocumentModel other = (DefaultSingleDocumentModel) obj;
 		return counter == other.counter;
 	}
-
-	
-	
-	
-
 }

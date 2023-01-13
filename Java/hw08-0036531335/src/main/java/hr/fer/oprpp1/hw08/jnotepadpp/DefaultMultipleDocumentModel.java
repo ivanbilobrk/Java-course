@@ -1,25 +1,42 @@
 package hr.fer.oprpp1.hw08.jnotepadpp;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import javax.swing.JComponent;
-import javax.swing.JOptionPane;
 import javax.swing.JTabbedPane;
 import java.util.*;
-import java.util.stream.Collectors;
 
+/**
+ * Class representing implementation of MultipleDocumentModel.
+ * This class is responsible for GUI of tabbed pane in JNotepad
+ * @author Ivan Bilobrk
+ *
+ */
 public class DefaultMultipleDocumentModel extends JTabbedPane implements MultipleDocumentModel{
 	
 	private static final long serialVersionUID = 1L;
 	
+	/**
+	 * All documents shown in tab.
+	 */
 	private List<SingleDocumentModel> docs;
+	
+	/**
+	 * Current selected document.
+	 */
 	private SingleDocumentModel currentDoc;
+	
+	/**
+	 * All listeners subscribed to this model.
+	 */
 	private List<MultipleDocumentListener> listeners;
 	
+	/**
+	 * Constructor
+	 */
 	public DefaultMultipleDocumentModel() {
 		this.listeners = new ArrayList<>();
 		this.docs = new ArrayList<>();

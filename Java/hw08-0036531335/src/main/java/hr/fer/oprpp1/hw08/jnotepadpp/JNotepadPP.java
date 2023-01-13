@@ -9,8 +9,6 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -20,15 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.text.Collator;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -39,9 +29,9 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JToolBar;
-import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.event.CaretEvent;
@@ -55,19 +45,49 @@ import hr.fer.oprpp1.hw08.jnotepadpp.local.FormLocalizationProvider;
 import hr.fer.oprpp1.hw08.jnotepadpp.local.LocalizableAction;
 import hr.fer.oprpp1.hw08.jnotepadpp.local.LocalizationProvider;
 
+/**
+ * Class representing JNotepadd, its GUI components and actions for buttons.
+ * @author Ivan Bilobrk
+ *
+ */
 public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 
 	private static final long serialVersionUID = 1L;
+	
+	/**
+	 * Status bar shown on the bottom of text area.
+	 */
 	private StatusBar statusBar;
-	private JTextArea editor;
+	
+	/**
+	 * Path of current open document.
+	 */
 	private Path openedFilePath;
+	
+	/**
+	 * LocalizationProvider used for translation.
+	 */
 	private FormLocalizationProvider flp = new FormLocalizationProvider(LocalizationProvider.getInstance(), this);
+	
+	/**
+	 * DocumentModel used for manipulating open documents.
+	 */
 	private DefaultMultipleDocumentModel mul;
+	
+	/**
+	 * Menu items for changing case of letters.
+	 */
 	private JMenuItem upperCase, lowerCase, invertCase;
 	
+	/**
+	 * Constructor
+	 */
 	public JNotepadPP() {
 		
 		setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		
+		//dodajemo listenera koji prati zatvaranje prozora te koji povezuje most LocalizationProvider-a sa stvarnim LocalizationProvider-om.
+		//kada je prozor zatvoren odspajamo LocalizationProvider-a te zatvarmo prozor i gasimo dretvu zaduženu za sat
 		this.addWindowListener(new WindowAdapter() {
 			
 			 public void windowOpened(WindowEvent e) {
@@ -86,45 +106,50 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			}
 		});
 		setLocation(0, 0);
-		setSize(700, 700);
+		setSize(1000, 1000);
+		
 		this.mul = new DefaultMultipleDocumentModel();
 		mul.addMultipleDocumentListener(this);
+		
+		//listener koji prati mijenjanje tabova
 		mul.addChangeListener((event)->{
 			int index = mul.getSelectedIndex();
 			if(index != -1) {
 				openedFilePath = mul.getDocument(index).getFilePath();
 				
 				mul.changeCurrentDoc(mul.getCurrentDocument(), mul.getDocument(index));
+				
 				if(openedFilePath == null) {
 					setTitle("(unnamed) - JNotepad++");
 				} else {
 					try {
 						setTitle(openedFilePath.toRealPath(LinkOption.NOFOLLOW_LINKS).toString()+" - JNotepad++");
 					} catch (IOException e) {
+						String title = flp.getString("error");
+						String description = flp.getString("cantSetTitle");
 						String options[] = {"OK"};
-						JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("cantSetTitle"),
-				                flp.getString("error"),
-				                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+						Util.showMessage(title, description, JNotepadPP.this, options);
 					}
 				}
+				//ažuriranje status bara
 				statusBar.setValueLength(fileSize(mul.getDocument(index).getTextComponent()));
 				mul.getCurrentDocument().getTextComponent().grabFocus();
 				updateCarot(mul.getCurrentDocument().getTextComponent());
+			} else {
+				setTitle("JNotepad++");
 			}
 
 		});
 		initGUI();
+		
 		setTitle("JNotepad++");
 	}
 	
-	private String[] yesNo() {
-		String[] options = {flp.getString("yes"), flp.getString("no")};
-		return options;
-	}
-	
+	/*
+	 * Private method for initializing GUI of JNotepad
+	 */
 	private void initGUI() {
 		statusBar = new StatusBar(flp);
-		editor = new JTextArea();
 		JPanel panel = new JPanel();
 		panel.setLayout(new BorderLayout());
 
@@ -141,6 +166,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		
 	}
 	
+	/**
+	 * Action for opening new document.
+	 */
 	private Action openNewDocument = new LocalizableAction(flp, "new") {
 		
 
@@ -151,7 +179,10 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			mul.createNewDocument();
 		}
 	};
-
+	
+	/*
+	 * Action for opening existing document.
+	 */
 	private Action openDocumentAction = new LocalizableAction(flp, "open") {
 		
 		private static final long serialVersionUID = 1L;
@@ -167,19 +198,19 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			Path filePath = fileName.toPath();
 			
 			if(!Files.isReadable(filePath)) {
+				String title = flp.getString("error");
+				String description = flp.getString("file")+" "+fileName.getAbsolutePath()+" "+flp.getString("notExists");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("file")+" "+fileName.getAbsolutePath()+" "+flp.getString("notExists"),
-		                flp.getString("error"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 				return;
 			}
 			try {
 				mul.loadDocument(filePath);
 			} catch(Exception ex) {
+				String title = flp.getString("error");
+				String description = flp.getString("cantLoadFile");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("cantLoadFile"),
-		                flp.getString("error"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 				return;
 			}
 			
@@ -187,27 +218,37 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for saving document as.
+	 */
 	private Action saveAsDocumentAction = new LocalizableAction(flp, "saveAs") {
 		
 		private static final long serialVersionUID = 1L;
 		@Override
 		public void actionPerformed(ActionEvent e) {
+			//zovemo metodu saveFile sa parametrom true jer želimo odabir mjesta spremanja ako datoteka već postoji
 			saveFile(true);
 		}
 	};
 	
+	/**
+	 * Private method for saving files or saving files as.
+	 * @param code - if false user will choose desired place to save a document, otherwise document
+	 * 				will be saved to existing path
+	 */
 	private void saveFile(boolean code) {
 		Path old = openedFilePath;
 		int index = mul.getSelectedIndex();
 		
 		if(index == -1) {
+			String title = flp.getString("warning");
+			String description = flp.getString("noSelection");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelection"),
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+			Util.showMessage(title, description, JNotepadPP.this, options);
 			return;
 		}
 		
+		//izbornik odabira mjesta spremanja nudimo samo po potrebi
 		if(code) {
 			if(!chooseFile()) {
 				return;
@@ -221,11 +262,12 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 			
 		try {
+			//ako odabrano mjesto već postoji pitamo usera želi li nastaviti sa promjenom ili ju odbaciti
 			if(code && Files.exists(openedFilePath, LinkOption.NOFOLLOW_LINKS)) {
-				 String[] options = yesNo();
-				int x = JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("documentExistsLong"),
-		                flp.getString("documentExists"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[1]);
+				String title = flp.getString("documentExists");
+				String description = flp.getString("documentExistsLong");
+				String[] options = Util.yesNo(flp);
+				int x = Util.showMessage(title, description, JNotepadPP.this, options);
 				if(x == 1 || x == -1) {
 					openedFilePath = old;
 					return;
@@ -234,76 +276,97 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			
 			mul.saveDocument(mul.getDocument(index), openedFilePath);
 		} catch (Exception e1) {
+			String title = flp.getString("error");
+			String description = flp.getString("errorWhileWriting")+" "+openedFilePath.toAbsolutePath()+"\n "+flp.getString("errorWhileWriting1");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("errorWhileWriting")+" "+openedFilePath.toAbsolutePath()+"\n "+flp.getString("errorWhileWriting1"),
-	                flp.getString("error"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE, null, options, options[0]);
+			Util.showMessage(title, description, JNotepadPP.this, options);
 			return;
 		}
+		String title = flp.getString("success");
+		String description = flp.getString("fileSaved");
 		String options[] = {"OK"};
-		JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("fileSaved"),
-                flp.getString("success"),
-                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+		Util.showMessage(title, description, JNotepadPP.this, options);
 	}
 	
 	
+	/**
+	 * Method which shows user a dialog to choose where to save document.
+	 * @return true if user has choosen a place, false otherwise
+	 */
 	private boolean chooseFile() {
 		JFileChooser jfc = new JFileChooser();
 		jfc.setDialogTitle(flp.getString("save"));
 		if(jfc.showSaveDialog(JNotepadPP.this)!=JFileChooser.APPROVE_OPTION) {
+			String title = flp.getString("warning");
+			String description = flp.getString("nothingSaved");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("nothingSaved"),
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+			Util.showMessage(title, description, JNotepadPP.this, options);
 			return false;
 		}
 		openedFilePath = jfc.getSelectedFile().toPath();
 		return true;
 	}
 	
-	
+	/**
+	 * Action for saving document.
+	 */
 	private Action saveDocumentAction = new LocalizableAction(flp, "save") {
 		
 		private static final long serialVersionUID = 1L;
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
+			//parametar je false jer ne želimo izbornik odabira mjesta spremanja ako je putanja poznata
+			//ako putanja nije poznata korisnik će morati izabrati mjesto
 			saveFile(false);
 		}
 	};
 	
+	/**
+	 * Method used for copying or cutting selected text from current document.
+	 * @param code - if true method will cut text, otherwise just copy
+	 * @param warning
+	 */
 	private void copyCut(boolean code, String warning) {
 		int index = mul.getSelectedIndex();
 		if(index == -1) {
+			String title = flp.getString("warning");
+			String description = flp.getString("noSelection");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelection"),
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+			Util.showMessage(title, description, JNotepadPP.this, options);
 			return;
 		} 
 		
 		SingleDocumentModel temp = mul.getDocument(index);
 		JTextArea editor = temp.getTextComponent();
+		
+		//izračun selekcije
 		int len = Math.abs(editor.getCaret().getDot()-editor.getCaret().getMark());
 		int offset = Math.min(editor.getCaret().getDot(),editor.getCaret().getMark());
 		try {
 			Document doc = editor.getDocument();
 			String selection = doc.getText(offset, len);
 			StringSelection stringSelection = new StringSelection(selection);
+			
+			//uklanjamo tekst ako je riječ o rezanju
 			if(code) {
 				doc.remove(offset, len);
 			}
+			
+			//spremamo tekst u clipboard
 			Clipboard clpbrd = Toolkit.getDefaultToolkit ().getSystemClipboard ();
 			clpbrd.setContents (stringSelection, null);
 		} catch (BadLocationException e1) {
+			String title = flp.getString("warning");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, warning,
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+			Util.showMessage(title, warning, JNotepadPP.this, options);
 			return;
 		}
 	}
 	
+	/**
+	 * Action for copying selected text
+	 */
 	private Action copySelection = new LocalizableAction(flp, "copy") {
 		
 		private static final long serialVersionUID = 1L;
@@ -314,6 +377,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for cutting selected text.
+	 */
 	private Action cutAction = new LocalizableAction(flp, "cut") {
 		
 		private static final long serialVersionUID = 1L;
@@ -324,56 +390,40 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
-	private Action deleteSelectedPartAction = new AbstractAction() {
-		
-		private static final long serialVersionUID = 1L;
-		
-		@Override
-		public void actionPerformed(ActionEvent e) {
-			Document doc = editor.getDocument();
-			int len = Math.abs(editor.getCaret().getDot()-editor.getCaret().getMark());
-			if(len==0) return;
-			int offset = Math.min(editor.getCaret().getDot(),editor.getCaret().getMark());
-			try {
-				doc.remove(offset, len);
-			} catch (BadLocationException e1) {
-				e1.printStackTrace();
-			}
-		}
-	};
-	
+	/**
+	 * Method which changes casing of selected letters based on given code.
+	 * @param code - if code is 0 given this method will return new string with all uppercase letters, 
+	 * 				if code is 1 this method will return new string with all lowercase letters and
+	 * 				if code is 2 this method will return new string with lowercase letters changed to uppercase
+	 */
 	private void changeCaseItem(int code) {
 		Document doc = mul.getCurrentDocument().getTextComponent().getDocument();
 		Caret caret = mul.getCurrentDocument().getTextComponent().getCaret();
+		
 		int len = Math.abs(caret.getDot()-caret.getMark());
 		int offset = 0;
+		
 		if(len!=0) {
 			offset = Math.min(caret.getDot(),caret.getMark());
 		} 
+		
 		try {
 			String text = doc.getText(offset, len);
-			text = changeCase(text, code);
+			text = Util.changeCase(text, code);
+			
 			doc.remove(offset, len);
 			doc.insertString(offset, text, null);
 		} catch(BadLocationException ex) {
-			ex.printStackTrace();
+			String title = flp.getString("warning");
+			String description = flp.getString("cantChangeCase");
+			String options[] = {"OK"};
+			Util.showMessage(title, description, JNotepadPP.this, options);
 		}
 	}
 	
-
-	private String changeCase(String text, int code) {
-		char[] znakovi = text.toCharArray();
-		for(int i = 0; i < znakovi.length; i++) {
-			char c = znakovi[i];
-			if(Character.isLowerCase(c) && (code == 0 || code == 2)) {
-				znakovi[i] = Character.toUpperCase(c);
-			} else if(Character.isUpperCase(c) && (code == 1 || code == 2)) {
-				znakovi[i] = Character.toLowerCase(c);
-			}
-		}
-		return new String(znakovi);
-	}
-	
+	/**
+	 * Action for changing selected text to lowercase.
+	 */
 	private Action toggleLowerCaseAction = new LocalizableAction(flp, "lowerCase") {
 		
 		private static final long serialVersionUID = 1L;
@@ -384,6 +434,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for inverting casing of selected text.
+	 */
 	private Action toggleInvertCase = new LocalizableAction(flp, "invertCase") {
 		
 		private static final long serialVersionUID = 1L;
@@ -394,6 +447,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for changing selected text to uppercase.
+	 */
 	private Action toggleCaseAction = new LocalizableAction(flp, "upperCase") {
 		
 		private static final long serialVersionUID = 1L;
@@ -404,6 +460,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for removing tab from tabbed pane.
+	 */
 	private Action removeTabAction = new LocalizableAction(flp, "removeTab") {
 		
 		private static final long serialVersionUID = 1L;
@@ -425,12 +484,14 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 				}
 				mul.closeDocument(mul.getDocument(index));
 			} else {
+				String title = flp.getString("error");
+				String description = flp.getString("notChoosen");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("notChoosen"),
-		                flp.getString("error"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 			}
 			
+			//nakon što smo maknuli tab potrebno je ažurirati sve vrijednosti status bara i onemogućiti promjenu velikih i malih slova 
+			//jer nema selekcije teksta
 			if(mul.getNumberOfDocuments() == 0) {
 				statusBar.setValueLength(0);
 				statusBar.setValueLine(0);
@@ -445,6 +506,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for pasting text.
+	 */
 	private Action pasteAction = new LocalizableAction(flp, "paste") {
 		
 		private static final long serialVersionUID = 1L;
@@ -454,10 +518,10 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			
 			int index = mul.getSelectedIndex();
 			if(index == -1) {
+				String title = flp.getString("warning");
+				String description = flp.getString("noSelection");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelection"),
-		                flp.getString("warning"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 				return;
 			}
 			SingleDocumentModel temp = mul.getDocument(index);
@@ -467,10 +531,10 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 				String data = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
 				editor.getDocument().insertString(offset, data, null);
 			} catch (HeadlessException | UnsupportedFlavorException | IOException | BadLocationException e1) {
+				String title = flp.getString("error");
+				String description = flp.getString("cantPaste");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("cantPaste"),
-		                flp.getString("error"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 				return;
 			} 
 			
@@ -478,6 +542,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Action for exiting which checks if there are any unsaved documents.
+	 */
 	private Action exitAction = new LocalizableAction(flp, "exit") {
 		
 		private static final long serialVersionUID = 1L;
@@ -485,13 +552,16 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			int count = mul.getComponentCount();
+			
+			//prolazimo sve dokumente i provjeravamo jesu li spremljeni
 			for(int i = 0; i < count; i++) {
 				SingleDocumentModel temp = mul.getDocument(i);
 				if(temp.isModified()) {
+					String title = flp.getString("warning");
+					String description = flp.getString("notSavedMods")+" "+mul.getTitleAt(i);
 					String options[] = {flp.getString("save"), flp.getString("discard"), flp.getString("abort")};
-					int x = JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("notSavedMods")+" "+mul.getTitleAt(i),
-			                flp.getString("warning"),
-			                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+					
+					int x = Util.showMessage(title, description, JNotepadPP.this, options);
 					
 					if(x == 0) {
 					    saveDocumentAction.actionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED, null) {
@@ -510,70 +580,12 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
-	private int lengthWithoutSpace(String s) {
-		char[] tempArray = s.toCharArray();
-		int len = tempArray.length;
-		int counter = 0;
-		
-		for(int i = 0; i < len; i++) {
-			char c = tempArray[i];
-			if (!(c == ' ' || c == '\t' || c == '\n' || c == '\r')) {
-				++counter;
-			}
-		}
-		return counter;
-	}
-	
-	private int numberOfLines(String s) {
-		char[] tempArray = s.toCharArray();
-		int len = tempArray.length;
-		int counter = 0;
-		
-		for(int i = 0; i < len; i++) {
-			char c = tempArray[i];
-			if (c == '\n') {
-				++counter;
-			}
-		}
-		return counter+1;
-	}
-	
-	private String sort(int start, int end, int code) {
-		Locale locale = new Locale(flp.getCurrentLanguage());
-		Collator collator = Collator.getInstance(locale);
-		JTextArea area = mul.getCurrentDocument().getTextComponent();
-		Document doc = area.getDocument();
-		String selectedText;
-		try {
-			selectedText = doc.getText(start, end-start);
-			
-			String[] lines = selectedText.split("\n");;
-			List<String> newLines = new ArrayList<>();
-			
-			for(String s : lines) {
-				String[] tempArray = s.split(" ");
-				String line;
-				if(code == 0) {
-					line = Stream.of(tempArray).sorted((s1, s2)-> collator.compare(s1, s2)).collect(Collectors.joining(" "));
-				} else {
-					line = Stream.of(tempArray).sorted((s1, s2)-> -collator.compare(s1, s2)).collect(Collectors.joining(" "));
-				}
-				
-				newLines.add(line);
-			}
-			
-			return newLines.stream().collect(Collectors.joining("\n"));
-		} catch (BadLocationException e) {
-			System.out.println(e.getMessage());
-			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelectionSort"),
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
-			return "";
-		}
-	}
-	
-	private void sortAction(int code) {
+	/**
+	 * Method used for sorting or removing unique lines from selected text.
+	 * @param code - if given code is 0 selection will be sorted in ascending way and if code is 1 in descending way for current selected language
+	 * 				if given code is 2 duplicate lines will be removed from selection
+	 */
+	private void sortUniqueAction(int code) {
 		int index = mul.getSelectedIndex();
 		if(index == -1) {
 			String options[] = {"OK"};
@@ -585,56 +597,71 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		
 		JTextArea area = mul.getCurrentDocument().getTextComponent();
 		Document doc = area.getDocument();
-		Caret caret = area.getCaret();
-		int mark = caret.getMark();
-		int dot = caret.getDot();
-		Element root = doc.getDefaultRootElement();
+		Offset offset = Util.calcOffset(area);
+		int offset1 = offset.getOffset1();
+		int offset2 = offset.getOffset2();
 		
 		try {
-			int line1 = root.getElementIndex(mark);
-			int line2 = root.getElementIndex(dot);
-			int offset1 = root.getElement(line1).getStartOffset();
-			int offset2 = root.getElement(line2).getEndOffset();
-			
-			 if(line1 > line2) {
-				 offset1 = root.getElement(line2).getStartOffset();
-				 offset2 = root.getElement(line1).getEndOffset();
-			} 
-			String sortedText = sort(offset1, offset2, code);
-			System.out.println(offset1+" "+offset2);
+			String insertionText;
+			if(code == 1 || code == 0) {
+				insertionText = Util.sort(offset1, offset2, code, flp, mul, JNotepadPP.this);
+			} else {
+				insertionText = Util.removeDuplicate(offset1, offset2,flp, mul, JNotepadPP.this);
+			}
 			doc.remove(offset1, offset2-offset1-1);
-			doc.insertString(offset1, sortedText, null);
-			
+			doc.insertString(offset1, insertionText, null);
 		} catch (BadLocationException e1) {
-			System.out.println(e1.getMessage());
+			String title = flp.getString("warning");
+			String description = flp.getString("noSelectionSort");
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelectionSort"),
-	                flp.getString("warning"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+			Util.showMessage(title, description, JNotepadPP.this, options);
 			return;
 		}
 	}
 	
+	/**
+	 * Action for removing duplicate lines from selection.
+	 */
+	private Action uniqueAction = new LocalizableAction(flp, "unique") {
+		
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			sortUniqueAction(3);
+		}
+			
+	};
+	
+	/**
+	 * Action for sorting selected text in ascending way.
+	 */
 	private Action ascending = new LocalizableAction(flp, "ascending") {
 		
 		private static final long serialVersionUID = 1L;
 
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			sortAction(0);	
+			sortUniqueAction(0);	
 		}
 	};
 	
+	/**
+	 * Action for sorting selected text in descscending way.
+	 */
 	private Action descending = new LocalizableAction(flp, "descending") {
 		
 		private static final long serialVersionUID = 1L;
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			sortAction(1);
+			sortUniqueAction(1);
 		}
 	};
 	
+	/**
+	 * Action for showing statistic of current selected document.
+	 */
 	private Action stats = new LocalizableAction(flp, "stats") {
 		
 		private static final long serialVersionUID = 1L;
@@ -643,87 +670,52 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		public void actionPerformed(ActionEvent e) {
 			int index = mul.getSelectedIndex();
 			if(index == -1) {
+				String title = flp.getString("warning");
+				String description = flp.getString("noSelection");
 				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("noSelection"),
-		                flp.getString("warning"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.YES_NO_OPTION, null, options, options[0]);
+				Util.showMessage(title, description, JNotepadPP.this, options);
 				return;
 			}
 			
 			JTextArea editor =mul.getDocument(index).getTextComponent();
 			Document doc = editor.getDocument();
 			int lengthAll = doc.getLength();
-			int lengthNoSpaces = lengthWithoutSpace(editor.getText());
-			int numOfLines = numberOfLines(editor.getText());
+			int lengthNoSpaces = Util.lengthWithoutSpace(editor.getText());
+			int numOfLines = Util.numberOfLines(editor.getText());
 			
+			String title = flp.getString("stats");
+			String description = flp.getString("numCharsAll")+" "+lengthAll+"\n"+flp.getString("numChars")+
+					" "+lengthNoSpaces +"\n"+flp.getString("numLines")+" "+numOfLines;
 			String options[] = {"OK"};
-			JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("numCharsAll")+" "+lengthAll+"\n"+flp.getString("numChars")+
-					" "+lengthNoSpaces +"\n"+flp.getString("numLines")+" "+numOfLines,
-	                flp.getString("stats"),
-	                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
-			
+			Util.showMessage(title, description, JNotepadPP.this, options);
 		}
 	};
-
+	
+	/**
+	 * Method for initializing actions.
+	 */
 	private void createActions() {
-		
-		openDocumentAction.putValue(
-				Action.ACCELERATOR_KEY, 
-				KeyStroke.getKeyStroke("control O")); 
-		openDocumentAction.putValue(
-				Action.MNEMONIC_KEY, 
-				KeyEvent.VK_O); 
-
-		
-		saveDocumentAction.putValue(
-				Action.ACCELERATOR_KEY, 
-				KeyStroke.getKeyStroke("control S")); 
-		saveDocumentAction.putValue(
-				Action.MNEMONIC_KEY, 
-				KeyEvent.VK_S); 
-
-		
-		deleteSelectedPartAction.putValue(
-				Action.NAME, 
-				"Delete selected text");
-		deleteSelectedPartAction.putValue(
-				Action.ACCELERATOR_KEY, 
-				KeyStroke.getKeyStroke("F2")); 
-		deleteSelectedPartAction.putValue(
-				Action.MNEMONIC_KEY, 
-				KeyEvent.VK_D); 
-		
-		exitAction.putValue(
-				Action.ACCELERATOR_KEY, 
-				KeyStroke.getKeyStroke("control X"));
-		exitAction.putValue(
-				Action.MNEMONIC_KEY, 
-				KeyEvent.VK_X); 
-
-		
-		saveAsDocumentAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control F12"));
-		saveAsDocumentAction.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_V);
-		
-		removeTabAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control W"));
-		removeTabAction.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_R);
-		
-		copySelection.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control C"));
-		copySelection.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_C);
-		
-		pasteAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control V"));
-		pasteAction.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_P);
-		
-		cutAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control B"));
-		cutAction.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_U);
-		
-		stats.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("control Q"));
-		stats.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_T);
+		Util.initActions(openDocumentAction, saveDocumentAction, exitAction, saveAsDocumentAction, removeTabAction, copySelection, pasteAction, cutAction, stats);
 	}
 
+	/**
+	 * Method for creating menus.
+	 */
 	private void createMenus() {
+		//svim menijima i podmenijima možemo pridijeliti LocalizableAction sa praznom metodom actionPerformed
+		//na ovaj način nam ne treba klasa nova za menije, a mijenjat će im se prijevod
+		
 		JMenuBar menuBar = new JMenuBar();
 		
-		JMenu fileMenu = new JMenu("File");
+		JMenu fileMenu = new JMenu(new LocalizableAction(flp, "file") {
+
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+			}
+		});
+		
 		menuBar.add(fileMenu);
 
 		fileMenu.add(new JMenuItem(openDocumentAction));
@@ -733,26 +725,34 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		fileMenu.add(new JMenuItem(exitAction));
 		fileMenu.add(new JMenuItem(stats));
 		
-		JMenu editMenu = new JMenu("Edit");
+		JMenu editMenu = new JMenu(new LocalizableAction(flp, "edit") {
+			
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {	
+			}
+		});
 		menuBar.add(editMenu);
 		
 		JMenu tools = new JMenu(new LocalizableAction(flp, "tools") {
 			
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				// TODO Auto-generated method stub
-				
 			}
 		});
+		
 		menuBar.add(tools);
 		
 		
 		JMenu changeCase = new JMenu(new LocalizableAction(flp, "changeCase") {
 			
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				// TODO Auto-generated method stub
-				
 			}
 		});
 		tools.add(changeCase);
@@ -770,7 +770,6 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		changeCase.add(lowerCase);
 		changeCase.add(invertCase);
 		
-		editMenu.add(new JMenuItem(deleteSelectedPartAction));
 		editMenu.add(new JMenuItem(removeTabAction));
 		editMenu.add(new JMenuItem(copySelection));
 		editMenu.add(new JMenuItem(pasteAction));
@@ -788,6 +787,7 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		sort.add(new JMenuItem(ascending));
 		sort.add(new JMenuItem(descending));
 		
+		tools.add(new JMenuItem(uniqueAction));
 		tools.add(sort);
 		
 		JMenu languageMenu = new JMenu(new LocalizableAction(flp, "language") {
@@ -812,6 +812,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		});
 		
 		JMenuItem mItemDE = new JMenuItem(new LocalizableAction(flp, "german") {
+
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				LocalizationProvider.getInstance().setLanguage("de");
@@ -819,6 +822,9 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		});
 		
 		JMenuItem mItemEN = new JMenuItem(new LocalizableAction(flp, "english") {
+
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				LocalizationProvider.getInstance().setLanguage("en");
@@ -831,7 +837,10 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		
 		this.setJMenuBar(menuBar);
 	}
-
+	
+	/**
+	 * Method used for creating toolbars
+	 */
 	private void createToolbars() {
 		JToolBar toolBar = new JToolBar("Alati");
 		toolBar.setFloatable(true);
@@ -840,7 +849,6 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		toolBar.add(new JButton(openDocumentAction));
 		toolBar.add(new JButton(saveDocumentAction));
 		toolBar.addSeparator();
-		toolBar.add(new JButton(deleteSelectedPartAction));
 		toolBar.add(new JButton(toggleCaseAction));
 		toolBar.add(new JButton(removeTabAction));
 		toolBar.add(new JButton(saveAsDocumentAction));
@@ -853,17 +861,30 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		this.getContentPane().add(toolBar, BorderLayout.PAGE_START);
 	}
 	
+	/**
+	 * Method used to load icons for saved and unsaved documents.
+	 * @param color - color of save icon
+	 * @return ImageIcon corresponding to given color
+	 */
 	private ImageIcon getSave(String color) {
 		InputStream is = this.getClass().getResourceAsStream("icons/"+color+"Save.png");
 		if(is==null) {
-			throw new IllegalStateException("Ne mogu učitati sliku.");
+			String title = flp.getString("warning");
+			String description = flp.getString("picFail");
+			String[] options = {"OK"};
+			Util.showMessage(title, description, JNotepadPP.this, options);
+			return null;
 		}
 		byte[] bytes;
 		try {
 			bytes = is.readAllBytes();
 			is.close();
 		} catch (IOException e) {
-			throw new IllegalStateException("Ne mogu učitati sliku.");
+			String title = flp.getString("warning");
+			String description = flp.getString("picFail");
+			String[] options = {"OK"};
+			Util.showMessage(title, description, JNotepadPP.this, options);
+			return null;
 		}
 		
 		Image scaled = new ImageIcon(bytes).getImage().getScaledInstance(25, 20, DO_NOTHING_ON_CLOSE);
@@ -898,12 +919,20 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		
 	}
 	
+	/**
+	 * Method used for calculating size of selected document
+	 * @param area - text area which size you want to get
+	 * @return size of given text area
+	 */
 	private int fileSize(JTextArea area) {
 		long size = area.getText().getBytes(StandardCharsets.UTF_8).length;
 		return (int) size;
 	}
 	
-	
+	/**
+	 * Listener for changes made to to document.
+	 * It updates GUI elements based on actions.
+	 */
 	SingleDocumentListener listener = new SingleDocumentListener() {
 		
 		@Override
@@ -931,18 +960,25 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		}
 	};
 	
+	/**
+	 * Method used for setting tool tip when path of document has been updated or when document has been added.
+	 * @param model - document fow which you want to set tooltip for
+	 */
 	private void setTooltipText(SingleDocumentModel model) {
 		try {
 			mul.setToolTipTextAt(mul.getIndexOfDocument(model), model.getFilePath().toRealPath(LinkOption.NOFOLLOW_LINKS).toString());
 		} catch (IOException e) {
-			JOptionPane.showMessageDialog(
-					JNotepadPP.this, 
-					"Ne mogu postaviti tooltip", 
-					"Pogreška", 
-					JOptionPane.ERROR_MESSAGE);
+			String title = flp.getString("warning");
+			String description = flp.getString("toolTipFail");
+			String options[] = {"OK"};
+			Util.showMessage(title, description, JNotepadPP.this, options);
 		}
 	}
 	
+	/**
+	 * Method used for updating status bar based on caret position.
+	 * @param area
+	 */
 	private void updateCarot(JTextArea area) {
 		int index = mul.getSelectedIndex();
 		if(index != -1) {
@@ -950,29 +986,27 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 			int pos1 = area.getCaret().getDot();
 			int pos2 = area.getCaret().getMark();
 			int sel = Math.abs(pos1-pos2);
-			try {
-				int line = area.getLineOfOffset(offset);
-				int column = offset - area.getLineStartOffset(line);
-				statusBar.setValueLine(line+1);
-				statusBar.setValueColumn(column+1);
-				statusBar.setValueSelection(sel);
-				statusBar.changeText();
-				if(sel > 0) {
-					upperCase.setEnabled(true);
-					lowerCase.setEnabled(true);
-					invertCase.setEnabled(true);
-				}
-			} catch (BadLocationException e1) {
-				String options[] = {"OK"};
-				JOptionPane.showOptionDialog(JNotepadPP.this, flp.getString("positionFail"),
-		                flp.getString("warning"),
-		                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
-			}
+			Document doc = area.getDocument();
+			Element root = doc.getDefaultRootElement();
 			
+			int line = root.getElementIndex(offset);
+			int column = offset - root.getElement(line).getStartOffset();
+			statusBar.setValueLine(line+1);
+			statusBar.setValueColumn(column+1);
+			statusBar.setValueSelection(sel);
+			statusBar.changeText();
+			
+			if(sel > 0) {
+				upperCase.setEnabled(true);
+				lowerCase.setEnabled(true);
+				invertCase.setEnabled(true);
+			} 
 		}
 	}
 	
-	
+	/**
+	 * Caret listener which listens for caret changes and updates GUI
+	 */
 	private CaretListener listnerCaret = new CaretListener() {
 		
 		@Override
@@ -987,10 +1021,10 @@ public class JNotepadPP extends JFrame implements MultipleDocumentListener{
 		if(model.getFilePath() == null) {
 			icon = getSave("red");
 			model.setModified(true);
-			mul.addTab("unnamed",icon ,model.getTextComponent());
+			mul.addTab("unnamed",icon ,new JScrollPane(model.getTextComponent()));
 		} else {
 			icon = getSave("green");
-			mul.addTab(model.getFilePath().getFileName().toString(), icon, model.getTextComponent());
+			mul.addTab(model.getFilePath().getFileName().toString(), icon, new JScrollPane(model.getTextComponent()));
 		}
 		model.addSingleDocumentListener(listener);
 		
