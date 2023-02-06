@@ -1,0 +1,2 @@
+{$for i "test1 \"escape\"""test2 \\escape"$}
+{$END$}

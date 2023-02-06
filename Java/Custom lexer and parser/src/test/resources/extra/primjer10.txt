@@ -1,0 +1,5 @@
+Testiranje ugnjezdene for petlje.
+{$ for i 10 20 "krajprve" $}
+{$   FOR j "string"-30.54$}
+{$END$} 
+{$END$} 
